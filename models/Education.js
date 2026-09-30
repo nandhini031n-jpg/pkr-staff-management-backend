@@ -1,28 +1,121 @@
 const mongoose = require("mongoose");
 
+// =====================================================
+// EDUCATION DOCUMENT SCHEMA
+// =====================================================
+
 const documentSchema = new mongoose.Schema(
   {
-    name: { type: String, default: "" },
-    fileName: { type: String, default: "" },
-    fileUrl: { type: String, default: "" },
-    fileType: { type: String, default: "" },
-    fileSize: { type: Number, default: 0 }
+    name: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    fileName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    fileUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    fileType: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    fileSize: {
+      type: Number,
+      default: 0,
+    },
   },
-  { _id: true }
+  {
+    _id: true,
+  }
 );
+
+// =====================================================
+// EDUCATION SCHEMA
+// =====================================================
 
 const educationSchema = new mongoose.Schema(
   {
-    staff: {
+    // -------------------------------------------------
+    // CONNECTION TO STAFF
+    // One Staff -> Multiple Education records
+    // -------------------------------------------------
+
+    staffId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Staff",
       required: true,
-      unique: true
+      index: true,
     },
-    records: { type: [mongoose.Schema.Types.Mixed], default: [] },
-    documents: { type: [documentSchema], default: [] }
+
+    // -------------------------------------------------
+    // EDUCATION DETAILS
+    // -------------------------------------------------
+
+    qualification: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    degree: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    university: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    yearOfPassing: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    percentage: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    specialization: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // -------------------------------------------------
+    // SUPPORTING DOCUMENTS
+    // -------------------------------------------------
+
+    documents: {
+      type: [documentSchema],
+      default: [],
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-module.exports = mongoose.model("Education", educationSchema);
+// =====================================================
+// MODEL EXPORT
+// =====================================================
+
+module.exports =
+  mongoose.models.Education ||
+  mongoose.model("Education", educationSchema);
