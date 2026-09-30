@@ -1,73 +1,28 @@
-const mongoose = require('mongoose');
-const educationDocumentSchema =
-new mongoose.Schema(
-{
-name: {
-type: String,
-default: '',
-},
-fileName: {
-type: String,
-required: true,
-},
-fileType: {
-type: String,
-default:
-'application/octet-stream',
-},
-fileUrl: {
-type: String,
-required: true,
-},
-},
-{
-_id: true,
-},
+const mongoose = require("mongoose");
+
+const documentSchema = new mongoose.Schema(
+  {
+    name: { type: String, default: "" },
+    fileName: { type: String, default: "" },
+    fileUrl: { type: String, default: "" },
+    fileType: { type: String, default: "" },
+    fileSize: { type: Number, default: 0 }
+  },
+  { _id: true }
 );
-const educationSchema =
-new mongoose.Schema(
-{
-staffId: {
-type: mongoose.Schema.Types.ObjectId,
-ref: 'Staff',
-required: true,
-},
-qualification: {
-type: String,
-default: '',
-},
-degree: {
-type: String,
-required: true,
-trim: true,
-},
-university: {
-type: String,
-default: '',
-},
-yearOfPassing: {
-type: String,
-default: '',
-},
-percentage: {
-type: String,
-default: '',
-},
-specialization: {
-type: String,
-default: '',
-},
-documents: {
-type: [educationDocumentSchema],
-default: [],
-},
-},
-{
-timestamps: true,
-},
+
+const educationSchema = new mongoose.Schema(
+  {
+    staff: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Staff",
+      required: true,
+      unique: true
+    },
+    records: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    documents: { type: [documentSchema], default: [] }
+  },
+  { timestamps: true }
 );
-module.exports =
-mongoose.model(
-'Education',
-educationSchema,
-);
+
+module.exports = mongoose.model("Education", educationSchema);

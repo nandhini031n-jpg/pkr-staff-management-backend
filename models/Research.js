@@ -1,25 +1,34 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const researchDocumentSchema = new mongoose.Schema(
+// ============================================================
+// DOCUMENT SCHEMA
+// ============================================================
+
+const documentSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
-      default: '',
+      default: "",
     },
+
     fileName: {
       type: String,
-      required: true,
-      default: '',
+      default: "",
     },
-    fileType: {
-      type: String,
-      default: '',
-    },
+
     fileUrl: {
       type: String,
-      required: true,
-      default: '',
+      default: "",
+    },
+
+    fileType: {
+      type: String,
+      default: "",
+    },
+
+    fileSize: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -27,279 +36,114 @@ const researchDocumentSchema = new mongoose.Schema(
   }
 );
 
-const linkSchema = new mongoose.Schema(
-  {
-    title: {
-      type: String,
-      default: '',
-    },
-    url: {
-      type: String,
-      default: '',
-    },
-  },
-  {
-    _id: true,
-  }
-);
-
-const journalPublicationSchema = new mongoose.Schema(
-  {
-    articleTitle: {
-      type: String,
-      default: '',
-    },
-    authors: {
-      type: String,
-      default: '',
-    },
-    journal: {
-      type: String,
-      default: '',
-    },
-    index: {
-      type: String,
-      default: '',
-    },
-    publicationYear: {
-      type: String,
-      default: '',
-    },
-    doi: {
-      type: String,
-      default: '',
-    },
-    document: {
-      type: researchDocumentSchema,
-      default: null,
-    },
-    link: {
-      type: linkSchema,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  }
-);
-
-const conferenceSchema = new mongoose.Schema(
-  {
-    conferenceName: {
-      type: String,
-      default: '',
-    },
-    paperTitle: {
-      type: String,
-      default: '',
-    },
-    date: {
-      type: String,
-      default: '',
-    },
-    venue: {
-      type: String,
-      default: '',
-    },
-    document: {
-      type: researchDocumentSchema,
-      default: null,
-    },
-    link: {
-      type: linkSchema,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  }
-);
-
-const bookPublicationSchema = new mongoose.Schema(
-  {
-    bookTitle: {
-      type: String,
-      default: '',
-    },
-    author: {
-      type: String,
-      default: '',
-    },
-    publisher: {
-      type: String,
-      default: '',
-    },
-    isbn: {
-      type: String,
-      default: '',
-    },
-    document: {
-      type: researchDocumentSchema,
-      default: null,
-    },
-    link: {
-      type: linkSchema,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  }
-);
-
-const bookChapterSchema = new mongoose.Schema(
-  {
-    chapterTitle: {
-      type: String,
-      default: '',
-    },
-    book: {
-      type: String,
-      default: '',
-    },
-    author: {
-      type: String,
-      default: '',
-    },
-    document: {
-      type: researchDocumentSchema,
-      default: null,
-    },
-    link: {
-      type: linkSchema,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  }
-);
-
-const additionalCourseSchema = new mongoose.Schema(
-  {
-    course: {
-      type: String,
-      default: '',
-    },
-    institution: {
-      type: String,
-      default: '',
-    },
-    duration: {
-      type: String,
-      default: '',
-    },
-    result: {
-      type: String,
-      default: '',
-    },
-    document: {
-      type: researchDocumentSchema,
-      default: null,
-    },
-    link: {
-      type: linkSchema,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  }
-);
-
-const guestInvitationSchema = new mongoose.Schema(
-  {
-    event: {
-      type: String,
-      default: '',
-    },
-    invitedAs: {
-      type: String,
-      default: '',
-    },
-    institutionOrganizer: {
-      type: String,
-      default: '',
-    },
-    invitationDocument: {
-      type: researchDocumentSchema,
-      default: null,
-    },
-    eventLink: {
-      type: linkSchema,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  }
-);
+// ============================================================
+// RESEARCH SCHEMA
+// ============================================================
 
 const researchSchema = new mongoose.Schema(
   {
+    // ----------------------------------------------------------
+    // STAFF CONNECTION
+    // ----------------------------------------------------------
+
     staffId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Staff',
+      ref: "Staff",
       required: true,
       unique: true,
-      index: true,
     },
+
+    // ----------------------------------------------------------
+    // RESEARCH PROFILE
+    // ----------------------------------------------------------
 
     researchProfile: {
       researchArea: {
         type: String,
-        default: '',
+        default: "",
       },
+
       researchInterests: {
         type: String,
-        default: '',
+        default: "",
       },
-      cvDocument: {
-        type: researchDocumentSchema,
-        default: null,
-      },
+
       googleScholarLink: {
         type: String,
-        default: '',
+        default: "",
       },
+
       orcidLink: {
         type: String,
-        default: '',
+        default: "",
+      },
+
+      cvDocument: {
+        type: documentSchema,
+        default: null,
       },
     },
 
+    // ----------------------------------------------------------
+    // JOURNAL PUBLICATIONS
+    // ----------------------------------------------------------
+
     journalPublications: {
-      type: [journalPublicationSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+
+    // ----------------------------------------------------------
+    // INTERNATIONAL CONFERENCES
+    // ----------------------------------------------------------
 
     internationalConferences: {
-      type: [conferenceSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+
+    // ----------------------------------------------------------
+    // NATIONAL CONFERENCES
+    // ----------------------------------------------------------
 
     nationalConferences: {
-      type: [conferenceSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+
+    // ----------------------------------------------------------
+    // BOOK PUBLICATIONS
+    // ----------------------------------------------------------
 
     bookPublications: {
-      type: [bookPublicationSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+
+    // ----------------------------------------------------------
+    // BOOK CHAPTER PUBLICATIONS
+    // ----------------------------------------------------------
 
     bookChapterPublications: {
-      type: [bookChapterSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+
+    // ----------------------------------------------------------
+    // ADDITIONAL COURSES
+    // ----------------------------------------------------------
 
     additionalCourses: {
-      type: [additionalCourseSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
 
+    // ----------------------------------------------------------
+    // GUEST INVITATIONS
+    // ----------------------------------------------------------
+
     guestInvitations: {
-      type: [guestInvitationSchema],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
   },
@@ -308,4 +152,10 @@ const researchSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('Research', researchSchema);
+// ============================================================
+// EXPORT
+// ============================================================
+
+module.exports =
+  mongoose.models.Research ||
+  mongoose.model("Research", researchSchema);

@@ -15,49 +15,65 @@ const staffSchema = new mongoose.Schema(
       trim: true,
     },
 
-    email: {
+    designation: {
       type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-    },
-
-    phone: {
-      type: String,
-      trim: true,
+      default: "",
     },
 
     department: {
       type: String,
-      trim: true,
+      default: "",
     },
 
-    designation: {
+    email: {
       type: String,
+      default: "",
       trim: true,
     },
 
-    dateOfBirth: {
-      type: Date,
-    },
-
-    dateOfJoining: {
-      type: Date,
-    },
-
-    address: {
+    phone: {
       type: String,
-      trim: true,
+      default: "",
     },
 
     gender: {
       type: String,
-      enum: ["Male", "Female", "Other"],
+      default: "",
+    },
+
+    dateOfBirth: {
+      type: String,
+      default: "",
+    },
+
+    dateOfJoining: {
+      type: String,
+      default: "",
+    },
+
+    qualification: {
+      type: String,
+      default: "",
+    },
+
+    specialization: {
+      type: String,
+      default: "",
     },
 
     profileImage: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
+    address: {
       type: String,
+      default: "",
+    },
+
+    profile: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   {
@@ -65,4 +81,6 @@ const staffSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Staff", staffSchema);
+module.exports =
+  mongoose.models.Staff ||
+  mongoose.model("Staff", staffSchema);
