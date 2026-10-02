@@ -9,6 +9,20 @@ const Staff = require("./models/Staff");
 
 const router = express.Router();
 
+// The Research schema in this project uses `staffId` as the owner field.
+// Keep a small compatibility fallback for older databases that used `staff`.
+const researchOwnerField = Research.schema.path('staffId')
+  ? 'staffId'
+  : 'staff';
+
+function researchOwnerFilter(staffId) {
+  return { [researchOwnerField]: staffId };
+}
+
+function researchOwnerData(staffId) {
+  return { [researchOwnerField]: staffId };
+}
+
 // ============================================================
 // RESEARCH UPLOAD DIRECTORY
 // ============================================================
@@ -119,16 +133,16 @@ router.get("/staff/:staffId", async (req, res) => {
       });
     }
 
-    let research = await Research.findOne({
-      staff: staffId,
-    });
+    let research = await Research.findOne(
+      researchOwnerFilter(staffId)
+    );
 
     // Automatically create Research profile
     // if this staff member does not have one.
     if (!research) {
-      research = await Research.create({
-        staff: staffId,
-      });
+      research = await Research.create(
+        researchOwnerData(staffId)
+      );
     }
 
     return res.json(research);
@@ -170,17 +184,17 @@ router.post("/", async (req, res) => {
       });
     }
 
-    let research = await Research.findOne({
-      staff: staffId,
-    });
+    let research = await Research.findOne(
+      researchOwnerFilter(staffId)
+    );
 
     if (research) {
       return res.json(research);
     }
 
-    research = await Research.create({
-      staff: staffId,
-    });
+    research = await Research.create(
+      researchOwnerData(staffId)
+    );
 
     return res.status(201).json(research);
   } catch (error) {
@@ -299,7 +313,7 @@ router.delete("/:id", async (req, res) => {
 });
 
 // ============================================================
-// HELPER — DELETE PHYSICAL FILE
+// HELPER â€” DELETE PHYSICAL FILE
 // ============================================================
 
 function deletePhysicalFile(fileUrl) {
@@ -332,7 +346,7 @@ function deletePhysicalFile(fileUrl) {
 }
 
 // ============================================================
-// HELPER — DELETE ALL FILES FROM RESEARCH
+// HELPER â€” DELETE ALL FILES FROM RESEARCH
 // ============================================================
 
 function deleteFilesFromResearch(research) {
@@ -477,7 +491,7 @@ router.post(
       };
 
       // ======================================================
-      // PROFILE → CV
+      // PROFILE â†’ CV
       // ======================================================
 
       if (section === "researchProfile") {
