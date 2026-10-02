@@ -23,6 +23,44 @@ function researchOwnerData(staffId) {
   return { [researchOwnerField]: staffId };
 }
 
+// Mixed arrays do not automatically get MongoDB subdocument _id values.
+// Generate stable IDs so Flutter can edit/delete/upload documents for
+// individual Research records.
+const mixedResearchSections = [
+  "journalPublications",
+  "internationalConferences",
+  "nationalConferences",
+  "bookPublications",
+  "bookChapterPublications",
+  "additionalCourses",
+  "guestInvitations",
+];
+
+function ensureResearchItemIds(research) {
+  let changed = false;
+
+  for (const section of mixedResearchSections) {
+    const items = research[section];
+
+    if (!Array.isArray(items)) {
+      continue;
+    }
+
+    for (const item of items) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+
+      if (!item._id) {
+        item._id = new mongoose.Types.ObjectId();
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
+
 // ============================================================
 // RESEARCH UPLOAD DIRECTORY
 // ============================================================
@@ -145,6 +183,10 @@ router.get("/staff/:staffId", async (req, res) => {
       );
     }
 
+    if (ensureResearchItemIds(research)) {
+      await research.save();
+    }
+
     return res.json(research);
   } catch (error) {
     console.error("Get research error:", error);
@@ -189,6 +231,10 @@ router.post("/", async (req, res) => {
     );
 
     if (research) {
+      if (ensureResearchItemIds(research)) {
+        await research.save();
+      }
+
       return res.json(research);
     }
 
@@ -245,6 +291,26 @@ router.put("/:id", async (req, res) => {
         delete updateData[key];
       }
     });
+
+    // Mixed-array records need explicit IDs for Flutter edit/delete/document actions.
+    for (const section of mixedResearchSections) {
+      if (Array.isArray(updateData[section])) {
+        updateData[section] = updateData[section].map((item) => {
+          if (!item || typeof item !== "object") {
+            return item;
+          }
+
+          if (!item._id) {
+            return {
+              ...item,
+              _id: new mongoose.Types.ObjectId(),
+            };
+          }
+
+          return item;
+        });
+      }
+    }
 
     const research = await Research.findByIdAndUpdate(
       id,
@@ -313,7 +379,7 @@ router.delete("/:id", async (req, res) => {
 });
 
 // ============================================================
-// HELPER â€” DELETE PHYSICAL FILE
+// HELPER Ã¢â‚¬â€ DELETE PHYSICAL FILE
 // ============================================================
 
 function deletePhysicalFile(fileUrl) {
@@ -346,7 +412,7 @@ function deletePhysicalFile(fileUrl) {
 }
 
 // ============================================================
-// HELPER â€” DELETE ALL FILES FROM RESEARCH
+// HELPER Ã¢â‚¬â€ DELETE ALL FILES FROM RESEARCH
 // ============================================================
 
 function deleteFilesFromResearch(research) {
@@ -491,7 +557,7 @@ router.post(
       };
 
       // ======================================================
-      // PROFILE â†’ CV
+      // PROFILE Ã¢â€ â€™ CV
       // ======================================================
 
       if (section === "researchProfile") {
@@ -620,7 +686,9 @@ router.post(
       // Create a new item containing the document.
       // ======================================================
 
-      const newItem = {};
+      const newItem = {
+        _id: new mongoose.Types.ObjectId(),
+      };
 
       newItem[documentField] =
         document;
@@ -1399,6 +1467,16 @@ router.get(
     }
   }
 );
+
+// ============================================================
+// BACKWARD-COMPATIBILITY FOR OLDER FLUTTER BUILDS
+// ============================================================
+// Older app builds used /document (singular). Rewrite those requests to
+// the current /documents route so an older APK does not get HTTP 404.
+router.use("/:researchId/document", (req, res, next) => {
+  req.url = req.url.replace("/document", "/documents");
+  next();
+});
 
 // ============================================================
 // FINAL EXPORT
