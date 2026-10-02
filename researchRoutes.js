@@ -801,6 +801,18 @@ router.delete(
           "invitationDocument";
       }
 
+      const allowedDocumentFields = new Set([
+        "document",
+        "invitationDocument",
+        "cvDocument",
+      ]);
+
+      if (!allowedDocumentFields.has(documentField)) {
+        return res.status(400).json({
+          message: "Invalid document field",
+        });
+      }
+
       const document =
         item[documentField];
 
@@ -1333,6 +1345,18 @@ router.get(
       ) {
         documentField =
           "invitationDocument";
+      }
+
+      const allowedDocumentFields = new Set([
+        "document",
+        "invitationDocument",
+        "cvDocument",
+      ]);
+
+      if (!allowedDocumentFields.has(documentField)) {
+        return res.status(400).json({
+          message: "Invalid document field",
+        });
       }
 
       const document =
