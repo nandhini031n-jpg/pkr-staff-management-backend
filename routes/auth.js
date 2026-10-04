@@ -11,6 +11,15 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 
+// ---------------------------------------------------------------------------
+// FIXED LOGIN ACCOUNTS
+// ---------------------------------------------------------------------------
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@gmail.com').toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+const HOD_EMAIL = (process.env.HOD_EMAIL || 'hod@gmail.com').toLowerCase();
+const HOD_PASSWORD = process.env.HOD_PASSWORD || 'hod123';
+
 // Works with hashed passwords (bcrypt) and plain-text passwords
 async function passwordMatches(entered, saved) {
   if (!saved) return false;
@@ -20,7 +29,7 @@ async function passwordMatches(entered, saved) {
   return entered === saved;
 }
 
-// Find HOD / ADMIN account in your existing collections
+// Looks for extra HOD / ADMIN accounts saved in MongoDB (optional)
 async function findManager(collectionNames, email) {
   for (const colName of collectionNames) {
     try {
@@ -47,6 +56,12 @@ router.post('/register-staff', async (req, res) => {
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
+
+    if (cleanEmail === ADMIN_EMAIL || cleanEmail === HOD_EMAIL) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'This email cannot be used for staff.' });
+    }
 
     const existing = await Staff.findOne({ email: cleanEmail });
     if (existing) {
@@ -97,45 +112,75 @@ router.post('/login', async (req, res) => {
         .json({ success: false, message: 'Email and password are required.' });
     }
 
+    // ------------------------- ADMIN LOGIN -------------------------
     if (role === 'ADMIN') {
+      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+        const token = jwt.sign({ id: 'admin', role: 'ADMIN' }, JWT_SECRET, {
+          expiresIn: '7d',
+        });
+        return res.json({
+          success: true,
+          token,
+          admin: { name: 'Admin', email: ADMIN_EMAIL },
+        });
+      }
+
       const admin = await findManager(['admins', 'admin'], email);
-      if (!admin || !(await passwordMatches(password, admin.password))) {
-        return res
-          .status(401)
-          .json({ success: false, message: 'Invalid admin credentials.' });
+      if (admin && (await passwordMatches(password, admin.password))) {
+        const token = jwt.sign({ id: admin._id, role: 'ADMIN' }, JWT_SECRET, {
+          expiresIn: '7d',
+        });
+        return res.json({
+          success: true,
+          token,
+          admin: { name: admin.name || 'Admin', email: admin.email },
+        });
       }
-      const token = jwt.sign({ id: admin._id, role: 'ADMIN' }, JWT_SECRET, {
-        expiresIn: '7d',
-      });
-      return res.json({
-        success: true,
-        token,
-        admin: { name: admin.name || 'Admin', email: admin.email },
-      });
+
+      return res
+        .status(401)
+        .json({ success: false, message: 'Invalid admin email or password.' });
     }
 
+    // -------------------------- HOD LOGIN --------------------------
     if (role === 'HOD') {
-      const hod = await findManager(['hods', 'hod'], email);
-      if (!hod || !(await passwordMatches(password, hod.password))) {
-        return res
-          .status(401)
-          .json({ success: false, message: 'Invalid HOD credentials.' });
+      if (email === HOD_EMAIL && password === HOD_PASSWORD) {
+        const token = jwt.sign({ id: 'hod', role: 'HOD' }, JWT_SECRET, {
+          expiresIn: '7d',
+        });
+        return res.json({
+          success: true,
+          token,
+          hod: {
+            name: 'HOD',
+            email: HOD_EMAIL,
+            department: 'COMPUTER SCIENCE',
+          },
+        });
       }
-      const token = jwt.sign({ id: hod._id, role: 'HOD' }, JWT_SECRET, {
-        expiresIn: '7d',
-      });
-      return res.json({
-        success: true,
-        token,
-        hod: {
-          name: hod.name || 'Head of Department',
-          email: hod.email,
-          department: hod.department || 'COMPUTER SCIENCE',
-        },
-      });
+
+      const hod = await findManager(['hods', 'hod'], email);
+      if (hod && (await passwordMatches(password, hod.password))) {
+        const token = jwt.sign({ id: hod._id, role: 'HOD' }, JWT_SECRET, {
+          expiresIn: '7d',
+        });
+        return res.json({
+          success: true,
+          token,
+          hod: {
+            name: hod.name || 'HOD',
+            email: hod.email,
+            department: hod.department || 'COMPUTER SCIENCE',
+          },
+        });
+      }
+
+      return res
+        .status(401)
+        .json({ success: false, message: 'Invalid HOD email or password.' });
     }
 
-    // STAFF
+    // ------------------------- STAFF LOGIN -------------------------
     const staff = await Staff.findOne({ email });
     if (!staff || !(await passwordMatches(password, staff.password))) {
       return res
@@ -151,6 +196,7 @@ router.post('/login', async (req, res) => {
     delete staffData.password;
     staffData.id = String(staff._id);
 
+    // The app shows "Approval Pending" if status is PENDING
     return res.json({ success: true, token, staff: staffData });
   } catch (err) {
     console.error('Login Error:', err);
