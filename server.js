@@ -1,6 +1,4 @@
 // server.js
-// Install once:  npm install express mongoose cors dotenv bcryptjs jsonwebtoken
-
 require('dotenv').config();
 
 const express = require('express');
@@ -24,9 +22,20 @@ app.use('/api/auth', require('./routes/auth'));
 // app.use('/api/hod', require('./routes/hod'));
 // app.use('/api/report', require('./routes/report'));
 
-// MongoDB connection
+// Uses whichever MongoDB variable you already have in Render
+const MONGO_URL =
+  process.env.MONGO_URI ||
+  process.env.MONGODB_URI ||
+  process.env.MONGO_URL ||
+  process.env.DATABASE_URL ||
+  process.env.DB_URL;
+
+if (!MONGO_URL) {
+  console.error('No MongoDB variable found. Add MONGO_URI in Render -> Environment.');
+}
+
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(MONGO_URL)
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB error:', err));
 
