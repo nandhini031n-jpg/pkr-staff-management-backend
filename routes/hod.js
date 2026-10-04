@@ -12,7 +12,7 @@ function escapeRegex(text) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/hod/requests?department=MANAGEMENT
+// GET /api/hod/requests?department=COMPUTER SCIENCE
 // Returns only PENDING staff requests of that department
 // ---------------------------------------------------------------------------
 router.get('/requests', async (req, res) => {
