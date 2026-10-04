@@ -12,13 +12,21 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 
 // ---------------------------------------------------------------------------
-// FIXED LOGIN ACCOUNTS
+// FIXED LOGIN ACCOUNTS (HOD and ADMIN only)
 // ---------------------------------------------------------------------------
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@gmail.com').toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 const HOD_EMAIL = (process.env.HOD_EMAIL || 'hod@gmail.com').toLowerCase();
 const HOD_PASSWORD = process.env.HOD_PASSWORD || 'hod123';
+
+// Demo emails that must NEVER open the STAFF login
+const BLOCKED_STAFF_EMAILS = [
+  'staff@gmail.com',
+  'staff@pkr.com',
+  'test@gmail.com',
+  'demo@gmail.com',
+];
 
 // Works with hashed passwords (bcrypt) and plain-text passwords
 async function passwordMatches(entered, saved) {
@@ -57,10 +65,14 @@ router.post('/register-staff', async (req, res) => {
 
     const cleanEmail = String(email).trim().toLowerCase();
 
-    if (cleanEmail === ADMIN_EMAIL || cleanEmail === HOD_EMAIL) {
+    if (
+      cleanEmail === ADMIN_EMAIL ||
+      cleanEmail === HOD_EMAIL ||
+      BLOCKED_STAFF_EMAILS.includes(cleanEmail)
+    ) {
       return res
         .status(400)
-        .json({ success: false, message: 'This email cannot be used for staff.' });
+        .json({ success: false, message: 'This email cannot be used. Use your own email.' });
     }
 
     const existing = await Staff.findOne({ email: cleanEmail });
@@ -70,6 +82,8 @@ router.post('/register-staff', async (req, res) => {
         .json({ success: false, message: 'This email is already registered.' });
     }
 
+    // The password the staff enters here is saved (encrypted)
+    // and is the same password used for login later.
     const hashed = await bcrypt.hash(password, 10);
 
     const staff = await Staff.create({
@@ -181,11 +195,24 @@ router.post('/login', async (req, res) => {
     }
 
     // ------------------------- STAFF LOGIN -------------------------
+    // Only a person who registered in the app can log in here.
+    if (
+      BLOCKED_STAFF_EMAILS.includes(email) ||
+      email === ADMIN_EMAIL ||
+      email === HOD_EMAIL
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password. Please register as new staff first.',
+      });
+    }
+
     const staff = await Staff.findOne({ email });
     if (!staff || !(await passwordMatches(password, staff.password))) {
-      return res
-        .status(401)
-        .json({ success: false, message: 'Invalid email or password.' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password. Please register as new staff first.',
+      });
     }
 
     const token = jwt.sign({ id: staff._id, role: 'STAFF' }, JWT_SECRET, {
@@ -196,7 +223,8 @@ router.post('/login', async (req, res) => {
     delete staffData.password;
     staffData.id = String(staff._id);
 
-    // The app shows "Approval Pending" if status is PENDING
+    // The app shows "Approval Pending" if status is PENDING,
+    // and "rejected" message if status is REJECTED.
     return res.json({ success: true, token, staff: staffData });
   } catch (err) {
     console.error('Login Error:', err);
