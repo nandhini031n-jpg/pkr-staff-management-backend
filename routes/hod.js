@@ -1,85 +1,103 @@
+// routes/hod.js
 const express = require('express');
-const Request = require('../models/Request');
-const Staff = require('../models/Staff');
+const mongoose = require('mongoose');
+
+const StaffModule = require('../models/Staff');
+const Staff = StaffModule.Staff || StaffModule.default || StaffModule;
 
 const router = express.Router();
 
-// Get Pending Requests for Specific HOD Department or ALL Departments (Admin)
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/hod/requests?department=MANAGEMENT
+// Returns only PENDING staff requests of that department
+// ---------------------------------------------------------------------------
 router.get('/requests', async (req, res) => {
   try {
-    const { department } = req.query;
-    const query = (!department || department.toUpperCase() === 'ALL')
-      ? { status: 'PENDING' }
-      : { department: department.toUpperCase(), status: 'PENDING' };
+    const department = String(req.query.department || '').trim();
 
-    const requests = await Request.find(query).sort({ createdAt: -1 });
+    const filter = { status: 'PENDING' };
+    if (department) {
+      filter.department = new RegExp('^' + escapeRegex(department) + '$', 'i');
+    }
 
-    res.json({
-      success: true,
-      department: department || 'ALL',
-      requests: requests.map((r) => ({
-        id: r._id,
-        staffId: r.staffId,
-        name: r.name,
-        email: r.email,
-        mobile: r.mobile,
-        department: r.department,
-        status: r.status,
-        requestDate: r.requestDate,
-      })),
-    });
-  } catch (error) {
-    console.error('HOD Requests Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch HOD requests.' });
+    const list = await Staff.find(filter).sort({ createdAt: -1 });
+
+    const requests = list.map((s) => ({
+      id: String(s._id),
+      _id: String(s._id),
+      name: s.name || s.staffName || '',
+      email: s.email,
+      mobile: s.mobile,
+      department: s.department,
+      status: s.status,
+      requestDate: s.requestDate || '',
+    }));
+
+    return res.json({ success: true, requests });
+  } catch (err) {
+    console.error('HOD Requests Error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Could not load requests.' });
   }
 });
 
-// Accept Staff Request
+// ---------------------------------------------------------------------------
+// POST /api/hod/requests/:id/accept
+// ---------------------------------------------------------------------------
 router.post('/requests/:id/accept', async (req, res) => {
   try {
-    const requestId = req.params.id;
-    const request = await Request.findById(requestId);
-    if (!request) {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid request id.' });
+    }
+
+    const staff = await Staff.findByIdAndUpdate(
+      id,
+      { status: 'APPROVED' },
+      { new: true }
+    );
+    if (!staff) {
       return res.status(404).json({ success: false, message: 'Request not found.' });
     }
 
-    request.status = 'APPROVED';
-    await request.save();
-
-    // Update Staff Account to APPROVED
-    await Staff.findByIdAndUpdate(request.staffId, { status: 'APPROVED' });
-
-    res.json({
+    return res.json({
       success: true,
-      message: 'Staff request accepted! Staff account is now approved for portal access.',
+      message: staff.name + ' approved. Staff can now log in.',
     });
-  } catch (error) {
-    console.error('Accept Request Error:', error);
-    res.status(500).json({ success: false, message: 'Error approving request.' });
+  } catch (err) {
+    console.error('Accept Error:', err);
+    return res.status(500).json({ success: false, message: 'Could not approve request.' });
   }
 });
 
-// Reject Staff Request
+// ---------------------------------------------------------------------------
+// POST /api/hod/requests/:id/reject
+// ---------------------------------------------------------------------------
 router.post('/requests/:id/reject', async (req, res) => {
   try {
-    const requestId = req.params.id;
-    const request = await Request.findById(requestId);
-    if (!request) {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid request id.' });
+    }
+
+    const staff = await Staff.findByIdAndUpdate(
+      id,
+      { status: 'REJECTED' },
+      { new: true }
+    );
+    if (!staff) {
       return res.status(404).json({ success: false, message: 'Request not found.' });
     }
 
-    request.status = 'REJECTED';
-    await request.save();
-
-    await Staff.findByIdAndUpdate(request.staffId, { status: 'REJECTED' });
-
-    res.json({
-      success: true,
-      message: 'Staff request rejected.',
-    });
-  } catch (error) {
-    console.error('Reject Request Error:', error);
-    res.status(500).json({ success: false, message: 'Error rejecting request.' });
+    return res.json({ success: true, message: staff.name + ' rejected.' });
+  } catch (err) {
+    console.error('Reject Error:', err);
+    return res.status(500).json({ success: false, message: 'Could not reject request.' });
   }
 });
 
