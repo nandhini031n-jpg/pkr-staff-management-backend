@@ -1,11 +1,9 @@
 {
   "name": "pkr-staff-management-backend",
   "version": "1.0.0",
-  "description": "Backend API for P.K.R. Arts College for Women Staff Management",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -13,7 +11,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.3.1",
-    "multer": "^1.4.5-lts.1"
+    "mongoose": "^8.4.0"
   }
 }
