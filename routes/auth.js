@@ -2,47 +2,42 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const StaffModule = require('../models/Staff');
+const Staff = StaffModule.Staff || StaffModule.default || StaffModule;
 
 const router = express.Router();
 
-const staffSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true },
-    staffName: { type: String, default: '' },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true },
-    mobile: { type: String, required: true },
-    department: { type: String, required: true },
-    staffId: { type: String, default: '' },
-    designation: { type: String, default: 'Assistant Professor' },
-    courses: { type: String, default: '' },
-    qualification: { type: String, default: '' },
-    dateOfBirth: { type: String, default: '' },
-    yearsOfExperience: { type: String, default: '' },
-    specialization: { type: String, default: '' },
-    otherDetails: { type: String, default: '' },
-    contactAddress: { type: String, default: '' },
-    landline: { type: String, default: '' },
-    photoUrl: { type: String, default: '' },
-    status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
-    educationList: { type: Array, default: [] },
-    educationDocuments: { type: Array, default: [] },
-    researchData: { type: Object, default: {} },
-    researchDocuments: { type: Array, default: [] },
-    researchLinks: { type: Array, default: [] },
-    requestDate: { type: String, default: () => new Date().toISOString().split('T')[0] },
-  },
-  { timestamps: true }
-);
+const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 
-// If your project already has a "Staff" model, this reuses it
-const Staff = mongoose.models.Staff || mongoose.model('Staff', staffSchema);
+// Works with hashed passwords (bcrypt) and plain-text passwords
+async function passwordMatches(entered, saved) {
+  if (!saved) return false;
+  if (String(saved).startsWith('$2')) {
+    return bcrypt.compare(entered, saved);
+  }
+  return entered === saved;
+}
 
+// Find HOD / ADMIN account in your existing collections
+async function findManager(collectionNames, email) {
+  for (const colName of collectionNames) {
+    try {
+      const doc = await mongoose.connection.db
+        .collection(colName)
+        .findOne({ email: email });
+      if (doc) return doc;
+    } catch (_) {}
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/register-staff
+// ---------------------------------------------------------------------------
 router.post('/register-staff', async (req, res) => {
   try {
-    console.log('REGISTER BODY:', { ...req.body, password: '***' });
-    console.log('DB STATE (1 = connected):', mongoose.connection.readyState);
-
     const { name, email, password, mobile, department } = req.body;
 
     if (!name || !email || !password || !mobile || !department) {
@@ -79,14 +74,89 @@ router.post('/register-staff', async (req, res) => {
       staffId: staff.staffId,
     });
   } catch (err) {
-    console.error('REGISTER ERROR:', err);
-
-    // TEMPORARY DEBUG: sends the real reason to the app screen.
-    // Remove "DEBUG:" part after the problem is fixed.
+    console.error('Registration Error:', err);
     return res.status(500).json({
       success: false,
-      message: 'DEBUG: ' + (err.name || 'Error') + ' - ' + (err.message || String(err)),
+      message: 'Server error during registration.',
     });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/login   (role: STAFF, HOD or ADMIN)
+// ---------------------------------------------------------------------------
+router.post('/login', async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const role = String(req.body.role || 'STAFF').toUpperCase();
+
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Email and password are required.' });
+    }
+
+    if (role === 'ADMIN') {
+      const admin = await findManager(['admins', 'admin'], email);
+      if (!admin || !(await passwordMatches(password, admin.password))) {
+        return res
+          .status(401)
+          .json({ success: false, message: 'Invalid admin credentials.' });
+      }
+      const token = jwt.sign({ id: admin._id, role: 'ADMIN' }, JWT_SECRET, {
+        expiresIn: '7d',
+      });
+      return res.json({
+        success: true,
+        token,
+        admin: { name: admin.name || 'Admin', email: admin.email },
+      });
+    }
+
+    if (role === 'HOD') {
+      const hod = await findManager(['hods', 'hod'], email);
+      if (!hod || !(await passwordMatches(password, hod.password))) {
+        return res
+          .status(401)
+          .json({ success: false, message: 'Invalid HOD credentials.' });
+      }
+      const token = jwt.sign({ id: hod._id, role: 'HOD' }, JWT_SECRET, {
+        expiresIn: '7d',
+      });
+      return res.json({
+        success: true,
+        token,
+        hod: {
+          name: hod.name || 'Head of Department',
+          email: hod.email,
+          department: hod.department || 'COMPUTER SCIENCE',
+        },
+      });
+    }
+
+    // STAFF
+    const staff = await Staff.findOne({ email });
+    if (!staff || !(await passwordMatches(password, staff.password))) {
+      return res
+        .status(401)
+        .json({ success: false, message: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign({ id: staff._id, role: 'STAFF' }, JWT_SECRET, {
+      expiresIn: '7d',
+    });
+
+    const staffData = staff.toObject();
+    delete staffData.password;
+    staffData.id = String(staff._id);
+
+    return res.json({ success: true, token, staff: staffData });
+  } catch (err) {
+    console.error('Login Error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Server error during login.' });
   }
 });
 
