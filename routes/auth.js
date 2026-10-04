@@ -1,16 +1,10 @@
 // routes/auth.js
-// Install once:  npm install express mongoose bcryptjs jsonwebtoken
-
 const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const router = express.Router();
 
-// ---------------------------------------------------------------------------
-// Staff model (if you already have models/Staff.js, keep yours and make sure
-// staffId and designation are NOT required)
-// ---------------------------------------------------------------------------
 const staffSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -41,14 +35,13 @@ const staffSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// If your project already has a "Staff" model, this reuses it
 const Staff = mongoose.models.Staff || mongoose.model('Staff', staffSchema);
 
-// ---------------------------------------------------------------------------
-// POST /api/auth/register-staff
-// ---------------------------------------------------------------------------
 router.post('/register-staff', async (req, res) => {
   try {
     console.log('REGISTER BODY:', { ...req.body, password: '***' });
+    console.log('DB STATE (1 = connected):', mongoose.connection.readyState);
 
     const { name, email, password, mobile, department } = req.body;
 
@@ -68,7 +61,6 @@ router.post('/register-staff', async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    const staffId = 'PKR-' + Date.now();
 
     const staff = await Staff.create({
       name: String(name).trim(),
@@ -77,7 +69,7 @@ router.post('/register-staff', async (req, res) => {
       password: hashed,
       mobile: String(mobile).trim(),
       department: String(department).toUpperCase(),
-      staffId,
+      staffId: 'PKR-' + Date.now(),
       status: 'PENDING',
     });
 
@@ -87,21 +79,14 @@ router.post('/register-staff', async (req, res) => {
       staffId: staff.staffId,
     });
   } catch (err) {
-    // This line shows the REAL reason in Render -> Logs
     console.error('REGISTER ERROR:', err);
 
-    if (err.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Duplicate value: ' + JSON.stringify(err.keyValue),
-      });
-    }
-    if (err.name === 'ValidationError') {
-      return res.status(400).json({ success: false, message: err.message });
-    }
-    return res
-      .status(500)
-      .json({ success: false, message: 'Server error during registration.' });
+    // TEMPORARY DEBUG: sends the real reason to the app screen.
+    // Remove "DEBUG:" part after the problem is fixed.
+    return res.status(500).json({
+      success: false,
+      message: 'DEBUG: ' + (err.name || 'Error') + ' - ' + (err.message || String(err)),
+    });
   }
 });
 
