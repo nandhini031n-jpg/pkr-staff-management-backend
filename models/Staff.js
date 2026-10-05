@@ -19,7 +19,12 @@ const staffSchema = new mongoose.Schema(
     otherDetails: { type: String, default: '' },
     contactAddress: { type: String, default: '' },
     landline: { type: String, default: '' },
+
+    // Photo is stored inside MongoDB (Render's disk is erased on every deploy)
     photoUrl: { type: String, default: '' },
+    photoData: { type: Buffer, select: false },
+    photoContentType: { type: String, default: '' },
+
     status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
     educationList: { type: Array, default: [] },
     educationDocuments: { type: Array, default: [] },
@@ -28,7 +33,7 @@ const staffSchema = new mongoose.Schema(
     researchLinks: { type: Array, default: [] },
     requestDate: { type: String, default: () => new Date().toISOString().split('T')[0] },
   },
-  { timestamps: true }
+  { timestamps: true, minimize: false }
 );
 
 module.exports = mongoose.models.Staff || mongoose.model('Staff', staffSchema);
