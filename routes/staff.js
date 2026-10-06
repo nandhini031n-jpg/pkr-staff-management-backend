@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 
 const StaffModule = require('../models/Staff');
 const Staff = StaffModule.Staff || StaffModule.default || StaffModule;
+const StaffDocument = require('../models/StaffDocument');
 
 const router = express.Router();
 
@@ -17,7 +18,6 @@ function escapeRegex(text) {
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
-// Any logged in STAFF / HOD / ADMIN
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -43,20 +43,27 @@ function requireOwner(req, res, next) {
 }
 
 // ---------------------------------------------------------------------------
-// Photo upload (kept in memory, saved into MongoDB)
+// Photo upload (memory -> MongoDB). Type is detected from the real bytes,
+// so it works even if the phone sends a generic file type.
 // ---------------------------------------------------------------------------
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype && file.mimetype.startsWith('image/')) return cb(null, true);
-    cb(new Error('Only image files are allowed.'));
-  },
 });
+
+function sniffImage(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf.slice(0, 3).toString() === 'GIF') return 'image/gif';
+  if (buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP') {
+    return 'image/webp';
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/staff/list?department=PHYSICS&search=a
-// Approved staff only. Any logged in user can view.
 // ---------------------------------------------------------------------------
 router.get('/list', requireAuth, async (req, res) => {
   try {
@@ -69,7 +76,7 @@ router.get('/list', requireAuth, async (req, res) => {
 
     const search = String(req.query.search || '').trim();
     if (search) {
-      const rx = new RegExp(escapeRegex(search), 'i'); // capital or small letters
+      const rx = new RegExp(escapeRegex(search), 'i');
       filter.$or = [{ staffName: rx }, { name: rx }];
     }
 
@@ -114,7 +121,7 @@ router.get('/photo/:id', async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/profile/:id', requireAuth, async (req, res) => {
   try {
-    const staff = await Staff.findById(req.params.id).select('-password');
+    const staff = await Staff.findById(req.params.id).select('-password -photoData');
     if (!staff) {
       return res.status(404).json({ success: false, message: 'Staff profile not found.' });
     }
@@ -132,17 +139,13 @@ router.get('/profile/:id', requireAuth, async (req, res) => {
 const EDITABLE_FIELDS = [
   'staffName',
   'designation',
-  'courses',
   'qualification',
   'dateOfBirth',
   'yearsOfExperience',
   'specialization',
   'otherDetails',
-  'contactAddress',
-  'landline',
   'mobile',
-  'educationList',
-  'educationDocuments',
+  'qualificationDetails',
   'researchData',
   'researchDocuments',
   'researchLinks',
@@ -166,7 +169,7 @@ router.put('/profile/:id', requireAuth, requireOwner, async (req, res) => {
       req.params.id,
       { $set: update },
       { new: true }
-    ).select('-password');
+    ).select('-password -photoData');
 
     if (!updated) {
       return res.status(404).json({ success: false, message: 'Staff profile not found.' });
@@ -182,10 +185,11 @@ router.put('/profile/:id', requireAuth, requireOwner, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE own account (OWNER ONLY)
+// DELETE own account (OWNER ONLY) - also removes all uploaded documents
 // ---------------------------------------------------------------------------
 router.delete('/profile/:id', requireAuth, requireOwner, async (req, res) => {
   try {
+    await StaffDocument.deleteMany({ staffId: req.params.id });
     await Staff.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Profile deleted.' });
   } catch (error) {
@@ -201,7 +205,10 @@ router.post('/profile/:id/photo', requireAuth, requireOwner, (req, res) => {
     if (err) {
       return res.status(400).json({
         success: false,
-        message: err.message || 'Photo upload failed.',
+        message:
+          err.code === 'LIMIT_FILE_SIZE'
+            ? 'Photo is too large (max 5 MB).'
+            : err.message || 'Photo upload failed.',
       });
     }
     try {
@@ -209,11 +216,18 @@ router.post('/profile/:id/photo', requireAuth, requireOwner, (req, res) => {
         return res.status(400).json({ success: false, message: 'No photo provided.' });
       }
 
+      const type = sniffImage(req.file.buffer);
+      if (!type) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Please choose a JPG or PNG photo.' });
+      }
+
       const photoUrl = `/api/staff/photo/${req.params.id}?v=${Date.now()}`;
       await Staff.findByIdAndUpdate(req.params.id, {
         $set: {
           photoData: req.file.buffer,
-          photoContentType: req.file.mimetype,
+          photoContentType: type,
           photoUrl,
         },
       });

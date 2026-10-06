@@ -14,16 +14,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ---------------------------------------------------------------------------
-// Health check (the Flutter app calls /api/health)
-// ---------------------------------------------------------------------------
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', success: true });
 });
 
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
 function mountRoute(urlPath, filePath) {
   const fullPath = path.join(__dirname, filePath + '.js');
   if (fs.existsSync(fullPath)) {
@@ -37,11 +31,9 @@ function mountRoute(urlPath, filePath) {
 mountRoute('/api/auth', 'routes/auth');
 mountRoute('/api/hod', 'routes/hod');
 mountRoute('/api/staff', 'routes/staff');
+mountRoute('/api/documents', 'routes/documents');
 mountRoute('/api/report', 'routes/report');
 
-// ---------------------------------------------------------------------------
-// MongoDB connection (uses whichever variable you already have in Render)
-// ---------------------------------------------------------------------------
 const MONGO_URL =
   process.env.MONGO_URI ||
   process.env.MONGODB_URI ||
@@ -58,9 +50,6 @@ mongoose
   .then(() => console.log('MongoDB Atlas Connected: ' + mongoose.connection.name))
   .catch((err) => console.error('MongoDB error:', err));
 
-// ---------------------------------------------------------------------------
-// Error handlers
-// ---------------------------------------------------------------------------
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found: ' + req.originalUrl });
 });
