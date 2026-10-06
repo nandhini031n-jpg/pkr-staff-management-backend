@@ -15,7 +15,7 @@ const staffSchema = new mongoose.Schema(
     dateOfBirth: { type: String, default: '' },
     yearsOfExperience: { type: String, default: '' },
     specialization: { type: String, default: '' },
-    otherDetails: { type: String, default: '' },
+    address: { type: String, default: '' },
 
     // Photo is stored inside MongoDB (Render's disk is erased on every deploy)
     photoUrl: { type: String, default: '' },
@@ -26,8 +26,12 @@ const staffSchema = new mongoose.Schema(
 
     // Education qualification form (8 fields)
     qualificationDetails: { type: Object, default: {} },
+    // Course form (name, duration, mode, description, specialization)
+    courseDetails: { type: Object, default: {} },
+
     // Extra document boxes created with the + button
-    documentBoxes: { type: [String], default: [] },
+    documentBoxes: { type: [String], default: [] }, // education documents
+    courseBoxes: { type: [String], default: [] }, // course certificates
 
     researchData: { type: Object, default: {} },
     researchDocuments: { type: Array, default: [] },

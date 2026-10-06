@@ -12,7 +12,8 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 
-const DEFAULT_BOXES = ['10th Marksheet', '12th Marksheet', 'UG Marksheet', 'PG Marksheet'];
+// Education section has 4 fixed boxes. Course section has no fixed boxes.
+const EDU_DEFAULT_BOXES = ['10th Marksheet', '12th Marksheet', 'UG Marksheet', 'PG Marksheet'];
 
 const MIME = {
   pdf: 'application/pdf',
@@ -26,6 +27,23 @@ const MIME = {
 function extOf(name) {
   const i = String(name).lastIndexOf('.');
   return i === -1 ? '' : String(name).slice(i + 1).toLowerCase();
+}
+
+// ---- section helpers ------------------------------------------------------
+function normSection(v) {
+  return String(v || '').toLowerCase() === 'course' ? 'course' : 'education';
+}
+function boxField(section) {
+  return section === 'course' ? 'courseBoxes' : 'documentBoxes';
+}
+function defaultsOf(section) {
+  return section === 'course' ? [] : EDU_DEFAULT_BOXES;
+}
+// old documents (before sections existed) have no "section" -> education
+function sectionFilter(section) {
+  return section === 'course'
+    ? { section: 'course' }
+    : { $or: [{ section: 'education' }, { section: { $exists: false } }] };
 }
 
 // ---------------------------------------------------------------------------
@@ -46,9 +64,7 @@ function requireAuth(req, res, next) {
 }
 
 function isOwner(req, staffId) {
-  return (
-    req.user && req.user.role === 'STAFF' && String(req.user.id) === String(staffId)
-  );
+  return req.user && req.user.role === 'STAFF' && String(req.user.id) === String(staffId);
 }
 
 function requireOwnerOfStaff(req, res, next) {
@@ -64,23 +80,26 @@ const upload = multer({
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/documents/staff/:staffId  -> boxes + document list (no file data)
+// GET /api/documents/staff/:staffId?section=education|course
 // ---------------------------------------------------------------------------
 router.get('/staff/:staffId', requireAuth, async (req, res) => {
   try {
     const id = req.params.staffId;
+    const section = normSection(req.query.section);
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.json({ success: true, boxes: [], documents: [] });
     }
 
-    const staff = await Staff.findById(id).select('documentBoxes');
-    const docs = await StaffDocument.find({ staffId: id })
+    const staff = await Staff.findById(id).select('documentBoxes courseBoxes');
+    const docs = await StaffDocument.find({ staffId: id, ...sectionFilter(section) })
       .select('-fileData')
       .sort({ createdAt: 1 });
 
     res.json({
       success: true,
-      boxes: (staff && staff.documentBoxes) || [],
+      section,
+      boxes: (staff && staff[boxField(section)]) || [],
       documents: docs.map((d) => ({
         id: String(d._id),
         box: d.box,
@@ -97,7 +116,7 @@ router.get('/staff/:staffId', requireAuth, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/documents/staff/:staffId   (OWNER) multipart: file + box
+// POST /api/documents/staff/:staffId   (OWNER) multipart: file + box + section
 // ---------------------------------------------------------------------------
 router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
   upload.single('file')(req, res, async (err) => {
@@ -115,6 +134,7 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
         return res.status(400).json({ success: false, message: 'No file provided.' });
       }
 
+      const section = normSection(req.body.section);
       const box = String(req.body.box || '').trim();
       if (!box) {
         return res.status(400).json({ success: false, message: 'Box name is required.' });
@@ -131,6 +151,7 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
 
       await StaffDocument.create({
         staffId: req.params.staffId,
+        section,
         box,
         name,
         mimeType,
@@ -138,10 +159,9 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
         fileData: req.file.buffer,
       });
 
-      // remember custom boxes
-      if (!DEFAULT_BOXES.includes(box)) {
+      if (!defaultsOf(section).includes(box)) {
         await Staff.findByIdAndUpdate(req.params.staffId, {
-          $addToSet: { documentBoxes: box },
+          $addToSet: { [boxField(section)]: box },
         });
       }
 
@@ -154,22 +174,24 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/documents/staff/:staffId/box   (OWNER) body: { name }
+// POST /api/documents/staff/:staffId/box   (OWNER) body: { name, section }
 // ---------------------------------------------------------------------------
 router.post('/staff/:staffId/box', requireAuth, requireOwnerOfStaff, async (req, res) => {
   try {
+    const section = normSection(req.body.section);
     const name = String(req.body.name || '').trim();
     if (!name || name.length > 40) {
       return res
         .status(400)
         .json({ success: false, message: 'Enter a box name (max 40 letters).' });
     }
-    if (DEFAULT_BOXES.some((b) => b.toLowerCase() === name.toLowerCase())) {
+    if (defaultsOf(section).some((b) => b.toLowerCase() === name.toLowerCase())) {
       return res.status(400).json({ success: false, message: 'That box already exists.' });
     }
 
-    const current = await Staff.findById(req.params.staffId).select('documentBoxes');
-    const exists = ((current && current.documentBoxes) || []).some(
+    const field = boxField(section);
+    const current = await Staff.findById(req.params.staffId).select(field);
+    const exists = ((current && current[field]) || []).some(
       (b) => b.toLowerCase() === name.toLowerCase()
     );
     if (exists) {
@@ -178,29 +200,36 @@ router.post('/staff/:staffId/box', requireAuth, requireOwnerOfStaff, async (req,
 
     const staff = await Staff.findByIdAndUpdate(
       req.params.staffId,
-      { $addToSet: { documentBoxes: name } },
+      { $addToSet: { [field]: name } },
       { new: true }
-    ).select('documentBoxes');
+    ).select(field);
 
-    res.json({ success: true, boxes: (staff && staff.documentBoxes) || [] });
+    res.json({ success: true, boxes: (staff && staff[field]) || [] });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Could not add box.' });
   }
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /api/documents/staff/:staffId/box/:name   (OWNER) + its documents
+// DELETE /api/documents/staff/:staffId/box/:name?section=...  (OWNER)
 // ---------------------------------------------------------------------------
 router.delete('/staff/:staffId/box/:name', requireAuth, requireOwnerOfStaff, async (req, res) => {
   try {
+    const section = normSection(req.query.section);
     const name = String(req.params.name || '').trim();
-    if (DEFAULT_BOXES.includes(name)) {
+    if (defaultsOf(section).includes(name)) {
       return res
         .status(400)
         .json({ success: false, message: 'Default boxes cannot be deleted.' });
     }
-    await StaffDocument.deleteMany({ staffId: req.params.staffId, box: name });
-    await Staff.findByIdAndUpdate(req.params.staffId, { $pull: { documentBoxes: name } });
+    await StaffDocument.deleteMany({
+      staffId: req.params.staffId,
+      box: name,
+      ...sectionFilter(section),
+    });
+    await Staff.findByIdAndUpdate(req.params.staffId, {
+      $pull: { [boxField(section)]: name },
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Could not delete box.' });

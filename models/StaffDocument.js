@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const staffDocumentSchema = new mongoose.Schema(
   {
     staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true, index: true },
+    // 'education' (10th, 12th, UG, PG ...) or 'course' (course certificates)
+    section: { type: String, enum: ['education', 'course'], default: 'education' },
     box: { type: String, required: true, trim: true },
     name: { type: String, required: true, trim: true },
     mimeType: { type: String, default: 'application/octet-stream' },

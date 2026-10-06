@@ -43,8 +43,7 @@ function requireOwner(req, res, next) {
 }
 
 // ---------------------------------------------------------------------------
-// Photo upload (memory -> MongoDB). Type is detected from the real bytes,
-// so it works even if the phone sends a generic file type.
+// Photo upload (memory -> MongoDB). Type is detected from the real bytes.
 // ---------------------------------------------------------------------------
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -143,9 +142,10 @@ const EDITABLE_FIELDS = [
   'dateOfBirth',
   'yearsOfExperience',
   'specialization',
-  'otherDetails',
+  'address',
   'mobile',
   'qualificationDetails',
+  'courseDetails',
   'researchData',
   'researchDocuments',
   'researchLinks',
