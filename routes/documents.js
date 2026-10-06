@@ -12,7 +12,7 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 
-// Education section has 4 fixed boxes. Course section has no fixed boxes.
+// Education section has 4 fixed boxes. All other sections have no fixed boxes.
 const EDU_DEFAULT_BOXES = ['10th Marksheet', '12th Marksheet', 'UG Marksheet', 'PG Marksheet'];
 
 const MIME = {
@@ -30,20 +30,40 @@ function extOf(name) {
 }
 
 // ---- section helpers ------------------------------------------------------
+// Allowed: education | course | research | pub_<letters/numbers>
 function normSection(v) {
-  return String(v || '').toLowerCase() === 'course' ? 'course' : 'education';
+  const s = String(v || '').trim();
+  if (s === 'course') return 'course';
+  if (s === 'research') return 'research';
+  if (/^pub_[A-Za-z0-9]+$/.test(s)) return s;
+  return 'education';
 }
-function boxField(section) {
-  return section === 'course' ? 'courseBoxes' : 'documentBoxes';
+
+// Path of the box list inside the Staff document
+function boxPath(section) {
+  if (section === 'course') return 'courseBoxes';
+  if (section === 'education') return 'documentBoxes';
+  return 'sectionBoxes.' + section;
 }
+
+// Read the box list from a loaded Staff document
+function boxesOf(staff, section) {
+  if (!staff) return [];
+  if (section === 'course') return staff.courseBoxes || [];
+  if (section === 'education') return staff.documentBoxes || [];
+  const all = staff.sectionBoxes || {};
+  return Array.isArray(all[section]) ? all[section] : [];
+}
+
 function defaultsOf(section) {
-  return section === 'course' ? [] : EDU_DEFAULT_BOXES;
+  return section === 'education' ? EDU_DEFAULT_BOXES : [];
 }
+
 // old documents (before sections existed) have no "section" -> education
 function sectionFilter(section) {
-  return section === 'course'
-    ? { section: 'course' }
-    : { $or: [{ section: 'education' }, { section: { $exists: false } }] };
+  return section === 'education'
+    ? { $or: [{ section: 'education' }, { section: { $exists: false } }] }
+    : { section };
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +100,7 @@ const upload = multer({
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/documents/staff/:staffId?section=education|course
+// GET /api/documents/staff/:staffId?section=education|course|research|pub_xxx
 // ---------------------------------------------------------------------------
 router.get('/staff/:staffId', requireAuth, async (req, res) => {
   try {
@@ -91,7 +111,7 @@ router.get('/staff/:staffId', requireAuth, async (req, res) => {
       return res.json({ success: true, boxes: [], documents: [] });
     }
 
-    const staff = await Staff.findById(id).select('documentBoxes courseBoxes');
+    const staff = await Staff.findById(id).select('documentBoxes courseBoxes sectionBoxes');
     const docs = await StaffDocument.find({ staffId: id, ...sectionFilter(section) })
       .select('-fileData')
       .sort({ createdAt: 1 });
@@ -99,7 +119,7 @@ router.get('/staff/:staffId', requireAuth, async (req, res) => {
     res.json({
       success: true,
       section,
-      boxes: (staff && staff[boxField(section)]) || [],
+      boxes: boxesOf(staff, section),
       documents: docs.map((d) => ({
         id: String(d._id),
         box: d.box,
@@ -161,7 +181,7 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
 
       if (!defaultsOf(section).includes(box)) {
         await Staff.findByIdAndUpdate(req.params.staffId, {
-          $addToSet: { [boxField(section)]: box },
+          $addToSet: { [boxPath(section)]: box },
         });
       }
 
@@ -189,10 +209,11 @@ router.post('/staff/:staffId/box', requireAuth, requireOwnerOfStaff, async (req,
       return res.status(400).json({ success: false, message: 'That box already exists.' });
     }
 
-    const field = boxField(section);
-    const current = await Staff.findById(req.params.staffId).select(field);
-    const exists = ((current && current[field]) || []).some(
-      (b) => b.toLowerCase() === name.toLowerCase()
+    const current = await Staff.findById(req.params.staffId).select(
+      'documentBoxes courseBoxes sectionBoxes'
+    );
+    const exists = boxesOf(current, section).some(
+      (b) => String(b).toLowerCase() === name.toLowerCase()
     );
     if (exists) {
       return res.status(400).json({ success: false, message: 'That box already exists.' });
@@ -200,12 +221,13 @@ router.post('/staff/:staffId/box', requireAuth, requireOwnerOfStaff, async (req,
 
     const staff = await Staff.findByIdAndUpdate(
       req.params.staffId,
-      { $addToSet: { [field]: name } },
+      { $addToSet: { [boxPath(section)]: name } },
       { new: true }
-    ).select(field);
+    ).select('documentBoxes courseBoxes sectionBoxes');
 
-    res.json({ success: true, boxes: (staff && staff[field]) || [] });
+    res.json({ success: true, boxes: boxesOf(staff, section) });
   } catch (error) {
+    console.error('Add box error:', error);
     res.status(500).json({ success: false, message: 'Could not add box.' });
   }
 });
@@ -228,10 +250,11 @@ router.delete('/staff/:staffId/box/:name', requireAuth, requireOwnerOfStaff, asy
       ...sectionFilter(section),
     });
     await Staff.findByIdAndUpdate(req.params.staffId, {
-      $pull: { [boxField(section)]: name },
+      $pull: { [boxPath(section)]: name },
     });
     res.json({ success: true });
   } catch (error) {
+    console.error('Delete box error:', error);
     res.status(500).json({ success: false, message: 'Could not delete box.' });
   }
 });

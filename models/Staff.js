@@ -33,6 +33,9 @@ const staffSchema = new mongoose.Schema(
     documentBoxes: { type: [String], default: [] }, // education documents
     courseBoxes: { type: [String], default: [] }, // course certificates
 
+    // Boxes for research sections: { research: [...], pub_123456: [...] }
+    sectionBoxes: { type: Object, default: {} },
+
     researchData: { type: Object, default: {} },
     researchDocuments: { type: Array, default: [] },
     researchLinks: { type: Array, default: [] },
