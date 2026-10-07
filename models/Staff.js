@@ -24,6 +24,9 @@ const staffSchema = new mongoose.Schema(
 
     status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
 
+    // true after HOD accepts, until the staff sees the welcome message once
+    welcomePending: { type: Boolean, default: false },
+
     // Education qualification form (8 fields)
     qualificationDetails: { type: Object, default: {} },
     // Course form (name, duration, mode, description, specialization)

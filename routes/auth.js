@@ -223,7 +223,13 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // HOD accepted -> normal login
+    // HOD accepted. Is this the FIRST login after acceptance?
+    const firstLogin = staff.welcomePending === true;
+    if (firstLogin) {
+      // clear the flag so the welcome message is shown only ONE time
+      await Staff.findByIdAndUpdate(staff._id, { $set: { welcomePending: false } });
+    }
+
     const token = jwt.sign({ id: staff._id, role: 'STAFF' }, JWT_SECRET, {
       expiresIn: '7d',
     });
@@ -231,10 +237,11 @@ router.post('/login', async (req, res) => {
     const staffData = staff.toObject();
     delete staffData.password;
     delete staffData.photoData;
+    delete staffData.welcomePending;
     staffData.id = String(staff._id);
     staffData.status = status;
 
-    return res.json({ success: true, token, staff: staffData });
+    return res.json({ success: true, token, firstLogin, staff: staffData });
   } catch (err) {
     console.error('Login Error:', err);
     return res

@@ -51,9 +51,10 @@ router.post('/requests/:id/accept', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid request id.' });
     }
 
+    // welcomePending = true -> staff sees the welcome message ONE time
     const staff = await Staff.findByIdAndUpdate(
       id,
-      { status: 'APPROVED' },
+      { status: 'APPROVED', welcomePending: true },
       { new: true }
     );
     if (!staff) {
@@ -80,7 +81,7 @@ router.post('/requests/:id/reject', async (req, res) => {
 
     const staff = await Staff.findByIdAndUpdate(
       id,
-      { status: 'REJECTED' },
+      { status: 'REJECTED', welcomePending: false },
       { new: true }
     );
     if (!staff) {
