@@ -11,9 +11,7 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 
-// ---------------------------------------------------------------------------
 // FIXED LOGIN ACCOUNTS (HOD and ADMIN only)
-// ---------------------------------------------------------------------------
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@gmail.com').toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
@@ -50,9 +48,7 @@ async function findManager(collectionNames, email) {
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // POST /api/auth/register-staff
-// ---------------------------------------------------------------------------
 router.post('/register-staff', async (req, res) => {
   try {
     const { name, email, password, mobile, department } = req.body;
@@ -82,8 +78,6 @@ router.post('/register-staff', async (req, res) => {
         .json({ success: false, message: 'This email is already registered.' });
     }
 
-    // The password the staff enters here is saved (encrypted)
-    // and is the same password used for login later.
     const hashed = await bcrypt.hash(password, 10);
 
     const staff = await Staff.create({
@@ -111,9 +105,7 @@ router.post('/register-staff', async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
 // POST /api/auth/login   (role: STAFF, HOD or ADMIN)
-// ---------------------------------------------------------------------------
 router.post('/login', async (req, res) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
@@ -195,7 +187,6 @@ router.post('/login', async (req, res) => {
     }
 
     // ------------------------- STAFF LOGIN -------------------------
-    // Only a person who registered in the app can log in here.
     if (
       BLOCKED_STAFF_EMAILS.includes(email) ||
       email === ADMIN_EMAIL ||
@@ -215,16 +206,34 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    const status = String(staff.status || 'PENDING').toUpperCase();
+
+    // Correct email + password, but HOD has not accepted (or rejected).
+    // NO token is given. The app shows the request status.
+    if (status !== 'APPROVED') {
+      return res.json({
+        success: true,
+        staff: {
+          id: String(staff._id),
+          name: staff.name,
+          email: staff.email,
+          department: staff.department,
+          status,
+        },
+      });
+    }
+
+    // HOD accepted -> normal login
     const token = jwt.sign({ id: staff._id, role: 'STAFF' }, JWT_SECRET, {
       expiresIn: '7d',
     });
 
     const staffData = staff.toObject();
     delete staffData.password;
+    delete staffData.photoData;
     staffData.id = String(staff._id);
+    staffData.status = status;
 
-    // The app shows "Approval Pending" if status is PENDING,
-    // and "rejected" message if status is REJECTED.
     return res.json({ success: true, token, staff: staffData });
   } catch (err) {
     console.error('Login Error:', err);

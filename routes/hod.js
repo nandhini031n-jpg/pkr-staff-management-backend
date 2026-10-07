@@ -11,10 +11,7 @@ function escapeRegex(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// ---------------------------------------------------------------------------
 // GET /api/hod/requests?department=COMPUTER SCIENCE
-// Returns only PENDING staff requests of that department
-// ---------------------------------------------------------------------------
 router.get('/requests', async (req, res) => {
   try {
     const department = String(req.query.department || '').trim();
@@ -46,9 +43,7 @@ router.get('/requests', async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
 // POST /api/hod/requests/:id/accept
-// ---------------------------------------------------------------------------
 router.post('/requests/:id/accept', async (req, res) => {
   try {
     const { id } = req.params;
@@ -75,9 +70,7 @@ router.post('/requests/:id/accept', async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
 // POST /api/hod/requests/:id/reject
-// ---------------------------------------------------------------------------
 router.post('/requests/:id/reject', async (req, res) => {
   try {
     const { id } = req.params;
