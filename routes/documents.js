@@ -1,4 +1,6 @@
 // routes/documents.js
+const fs = require('fs');
+const os = require('os');
 const express = require('express');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -11,6 +13,9 @@ const StaffDocument = require('../models/StaffDocument');
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
+
+// Maximum size of one uploaded document
+const MAX_MB = 50;
 
 // Education section has 4 fixed boxes. All other sections have no fixed boxes.
 const EDU_DEFAULT_BOXES = ['10th Marksheet', '12th Marksheet', 'UG Marksheet', 'PG Marksheet'];
@@ -27,6 +32,24 @@ const MIME = {
 function extOf(name) {
   const i = String(name).lastIndexOf('.');
   return i === -1 ? '' : String(name).slice(i + 1).toLowerCase();
+}
+
+// ---- GridFS helpers (big files) --------------------------------------------
+function getBucket() {
+  return new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+    bucketName: 'docfiles',
+  });
+}
+
+function saveToGridFS(filePath, filename, mimeType) {
+  return new Promise((resolve, reject) => {
+    const up = getBucket().openUploadStream(filename, { contentType: mimeType });
+    fs.createReadStream(filePath)
+      .on('error', reject)
+      .pipe(up)
+      .on('error', reject)
+      .on('finish', () => resolve(up.id));
+  });
 }
 
 // ---- section helpers ------------------------------------------------------
@@ -94,9 +117,10 @@ function requireOwnerOfStaff(req, res, next) {
     .json({ success: false, message: 'You can change only your own documents.' });
 }
 
+// Files go to a temporary disk file first (low memory), then to GridFS
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  storage: multer.diskStorage({ destination: os.tmpdir() }),
+  limits: { fileSize: MAX_MB * 1024 * 1024 },
 });
 
 // ---------------------------------------------------------------------------
@@ -145,10 +169,12 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
         success: false,
         message:
           err.code === 'LIMIT_FILE_SIZE'
-            ? 'File is too large (max 10 MB).'
+            ? 'File is too large (max ' + MAX_MB + ' MB).'
             : err.message || 'Upload failed.',
       });
     }
+
+    const tempPath = req.file ? req.file.path : null;
     try {
       if (!req.file) {
         return res.status(400).json({ success: false, message: 'No file provided.' });
@@ -169,6 +195,8 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
         });
       }
 
+      const fileId = await saveToGridFS(tempPath, name, mimeType);
+
       await StaffDocument.create({
         staffId: req.params.staffId,
         section,
@@ -176,7 +204,7 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
         name,
         mimeType,
         size: req.file.size,
-        fileData: req.file.buffer,
+        fileId,
       });
 
       if (!defaultsOf(section).includes(box)) {
@@ -189,6 +217,8 @@ router.post('/staff/:staffId', requireAuth, requireOwnerOfStaff, (req, res) => {
     } catch (error) {
       console.error('Upload document error:', error);
       res.status(500).json({ success: false, message: 'Failed to save document.' });
+    } finally {
+      if (tempPath) fs.unlink(tempPath, () => {});
     }
   });
 });
@@ -268,7 +298,31 @@ router.get('/file/:docId', requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, message: 'File not found.' });
     }
     const doc = await StaffDocument.findById(req.params.docId).select('+fileData');
-    if (!doc || !doc.fileData) {
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'File not found.' });
+    }
+
+    // New documents: stream from GridFS
+    if (doc.fileId) {
+      res.set('Content-Type', doc.mimeType || 'application/octet-stream');
+      res.set(
+        'Content-Disposition',
+        `inline; filename*=UTF-8''${encodeURIComponent(doc.name)}`
+      );
+      const stream = getBucket().openDownloadStream(doc.fileId);
+      stream.on('error', () => {
+        if (!res.headersSent) {
+          res.status(404).json({ success: false, message: 'File not found.' });
+        } else {
+          res.end();
+        }
+      });
+      stream.pipe(res);
+      return;
+    }
+
+    // Old documents: stored directly in the document
+    if (!doc.fileData || !doc.fileData.length) {
       return res.status(404).json({ success: false, message: 'File not found.' });
     }
     res.set('Content-Type', doc.mimeType || 'application/octet-stream');
@@ -278,6 +332,7 @@ router.get('/file/:docId', requireAuth, async (req, res) => {
     );
     res.send(doc.fileData);
   } catch (error) {
+    console.error('Read file error:', error);
     res.status(500).json({ success: false, message: 'Could not read file.' });
   }
 });
