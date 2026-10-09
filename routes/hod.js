@@ -16,7 +16,7 @@ function escapeRegex(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Auth helpers (used by the HOD profile routes)
+// Auth helpers
 // ---------------------------------------------------------------------------
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
@@ -37,7 +37,10 @@ function requireAuth(req, res, next) {
 function requireRole(role) {
   return (req, res, next) => {
     if (req.user && req.user.role === role) return next();
-    return res.status(403).json({ success: false, message: 'Not allowed.' });
+    return res.status(403).json({
+      success: false,
+      message: role === 'HOD' ? 'Only the HOD can do this.' : 'Not allowed.',
+    });
   };
 }
 
@@ -46,10 +49,10 @@ function clean(v, max = 120) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/hod/requests?department=COMPUTER SCIENCE
+// GET /api/hod/requests?department=COMPUTER SCIENCE     (HOD only)
 // Returns only PENDING staff requests of that department
 // ---------------------------------------------------------------------------
-router.get('/requests', async (req, res) => {
+router.get('/requests', requireAuth, requireRole('HOD'), async (req, res) => {
   try {
     const department = String(req.query.department || '').trim();
 
@@ -81,9 +84,9 @@ router.get('/requests', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/hod/requests/:id/accept
+// POST /api/hod/requests/:id/accept                     (HOD only)
 // ---------------------------------------------------------------------------
-router.post('/requests/:id/accept', async (req, res) => {
+router.post('/requests/:id/accept', requireAuth, requireRole('HOD'), async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -111,9 +114,9 @@ router.post('/requests/:id/accept', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/hod/requests/:id/reject
+// POST /api/hod/requests/:id/reject                     (HOD only)
 // ---------------------------------------------------------------------------
-router.post('/requests/:id/reject', async (req, res) => {
+router.post('/requests/:id/reject', requireAuth, requireRole('HOD'), async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -165,8 +168,6 @@ router.get('/profiles', requireAuth, requireRole('ADMIN'), async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // PUT /api/hod/profiles/sync   (HOD only)
-// body: { ownerEmail, profiles: [ {isOwn, name, email, mobile, department, dateOfBirth} ] }
-// Replaces all profiles saved by this HOD login with the list sent.
 // ---------------------------------------------------------------------------
 router.put('/profiles/sync', requireAuth, requireRole('HOD'), async (req, res) => {
   try {

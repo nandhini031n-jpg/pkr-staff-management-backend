@@ -17,8 +17,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'pkr_secret_key';
 // Maximum size of one uploaded document
 const MAX_MB = 50;
 
-// Education section has 4 fixed boxes. All other sections have no fixed boxes.
-const EDU_DEFAULT_BOXES = ['10th Marksheet', '12th Marksheet', 'UG Marksheet', 'PG Marksheet'];
+// Education section has 5 fixed boxes. All other sections have no fixed boxes.
+const EDU_DEFAULT_BOXES = [
+  '10th Marksheet',
+  '12th Marksheet',
+  'UG Marksheet',
+  'PG Marksheet',
+  'PhD Certificate',
+];
 
 const MIME = {
   pdf: 'application/pdf',
@@ -53,12 +59,12 @@ function saveToGridFS(filePath, filename, mimeType) {
 }
 
 // ---- section helpers ------------------------------------------------------
-// Allowed: education | course | research | pub_<letters/numbers>
+// Allowed: education | course | research | pub_<id> | course_<id>
 function normSection(v) {
   const s = String(v || '').trim();
   if (s === 'course') return 'course';
   if (s === 'research') return 'research';
-  if (/^pub_[A-Za-z0-9]+$/.test(s)) return s;
+  if (/^(pub|course)_[A-Za-z0-9]+$/.test(s)) return s;
   return 'education';
 }
 
@@ -124,7 +130,7 @@ const upload = multer({
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/documents/staff/:staffId?section=education|course|research|pub_xxx
+// GET /api/documents/staff/:staffId?section=education|course|research|pub_xxx|course_xxx
 // ---------------------------------------------------------------------------
 router.get('/staff/:staffId', requireAuth, async (req, res) => {
   try {
